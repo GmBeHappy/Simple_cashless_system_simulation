@@ -145,13 +145,15 @@ void payState() {
         break;
       }
     } else if (!digitalRead(BTN_4)) {
-      clearAllDisplays() generalTimer = 0;
+      clearAllDisplays(); 
+      generalTimer = 0;
       break;
     }
 
     if (generalTimer >= 8) {
       generalTimer = 0;
-      clearAllDisplays() break;
+      clearAllDisplays();
+      break;
     }
   }
 
@@ -202,7 +204,8 @@ void balanceState() {
   clearAllDisplays();
   oled.display();
 
-  balanceStateTimer while (1) {
+  balanceStateTimer = 0; 
+  while(1) {
     displayLCD(0, 0, "$:" + String(balance));
     displayOLED(10, 28, "balance");
 
