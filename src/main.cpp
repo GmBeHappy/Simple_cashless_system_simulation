@@ -18,6 +18,7 @@
 #define BTN_4 7
 #define EEPROM_DEVICE_ADDRESS 0x50
 #define BUZZER_PIN 3
+#define IDR_PIN A1
 
 int highc = 523;
 
@@ -34,8 +35,10 @@ void mainState();
 void payState();
 void topUpState();
 void balanceState();
+bool pendingState();
 int getBalance(byte* uid);
 bool updateBalance(int updateValue);
+void alarm();
 void saveBalance();
 byte readEEPROM_byte(int device, unsigned int address);
 void readEEPROM_page(int device, unsigned int address, byte *buffer, int length);
@@ -60,6 +63,8 @@ int balanceStateTimer = 0;
 int generalTimer = 0;
 int balance = 0;
 int userCredential = 0;
+boolean isInTopUpState = false;
+boolean isValidInsert = false;
 
 void setup() {
   Wire.begin();
@@ -68,6 +73,7 @@ void setup() {
   initScanner();
   initButtons();
   initTimerInterrupts();
+  pinMode(IDR_PIN, INPUT);
 }
 
 void loop() {
@@ -96,6 +102,7 @@ void loop() {
     rfid.PCD_StopCrypto1();
   }
 
+  alarm();
   balance = 0;
 }
 
@@ -137,6 +144,8 @@ void mainState() {
       oled.display();
       break;
     }
+
+    alarm();
   }
 
   isExitMain = false;
@@ -191,6 +200,8 @@ void payState() {
       clearAllDisplays();
       break;
     }
+
+    alarm();
   }
 
   clearAllDisplays();
@@ -201,6 +212,7 @@ void topUpState() {
   clearAllDisplays();
   oled.display();
 
+  isInTopUpState = true;
   int topUpValue = 0;
   while (1) {
     displayLCD(0, 0, "$:" + String(topUpValue));
@@ -219,7 +231,7 @@ void topUpState() {
       generalTimer = 0;
     } else if (!digitalRead(BTN_3)) {
       tone(BUZZER_PIN, highc, 100);
-      if (updateBalance(topUpValue)) {
+      if (pendingState() && updateBalance(topUpValue)) {
         saveBalance();
         isExitMain = true;
         break;
@@ -236,8 +248,10 @@ void topUpState() {
       clearAllDisplays();
       break;
     }
+
   }
 
+  isInTopUpState = false;
   clearAllDisplays();
 }
 
@@ -256,12 +270,52 @@ void balanceState() {
       clearAllDisplays();
       break;
     }
+
+    alarm();
   }
+}
+
+bool pendingState() {
+  clearAllDisplays();
+  oled.clearDisplay();
+
+  while(1) {
+    displayLCD(0, 0, "Insert money");
+    displayLCD(1, 0, "Done|Cancel");
+    displayOLED(10, 25, "pending");
+
+    if(!digitalRead(BTN_1)) {
+      generalTimer = 0;
+      //close box
+      return true;
+    } else if (!digitalRead(BTN_2)) {
+      generalTimer = 0;
+      //close box
+      clearAllDisplays();
+      return false;
+    }
+
+    if (generalTimer >= 8) {
+      generalTimer = 0;
+      //close box
+      clearAllDisplays();
+      return false;
+    }
+  }
+
+  clearAllDisplays();
 }
 
 ISR(TIMER1_COMPA_vect) {
   balanceStateTimer++;
   generalTimer++;
+  // check thief
+
+  if (!isInTopUpState && analogRead(IDR_PIN) > 100) {
+    isValidInsert = false;
+  } else {
+    isValidInsert = true;
+  }
 }
 
 void initLCD() {
@@ -370,6 +424,13 @@ void saveBalance() {
   writeEEPROM_page(EEPROM_DEVICE_ADDRESS, 0x00 + ((userCredential-1) * 16) + 0x04, (byte *)cleanEEPROM, sizeof(cleanEEPROM));
   writeEEPROM_page(EEPROM_DEVICE_ADDRESS, 0x00 + ((userCredential-1) * 16) + 0x04, (byte *)charBalance, sizeof(charBalance));
 
+}
+
+void alarm() {
+  Serial.println(analogRead(IDR_PIN));
+  if (!isValidInsert) {
+    tone(BUZZER_PIN, highc, 1000);
+  }
 }
 
 void printHex(byte* buffer, byte bufferSize) {
