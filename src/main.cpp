@@ -88,6 +88,9 @@ void loop() {
     } else {
       oled.clearDisplay();
       displayOLED(10, 28, "deny");
+      delay(1500);
+      oled.clearDisplay();
+      oled.display();
     }
     rfid.PICC_HaltA();
     rfid.PCD_StopCrypto1();
