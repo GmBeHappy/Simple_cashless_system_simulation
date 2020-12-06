@@ -17,6 +17,9 @@
 #define BTN_3 6
 #define BTN_4 7
 #define EEPROM_DEVICE_ADDRESS 0x50
+#define BUZZER_PIN 3
+
+int highc = 523;
 
 void initLCD();
 void initOLED();
@@ -77,6 +80,7 @@ void loop() {
     }
     printHex(rfid.uid.uidByte, rfid.uid.size);
     Serial.println();
+    tone(BUZZER_PIN, highc, 100);
     if (getBalance(uid) != -1) {
       Serial.println(getBalance(uid));
       balance = getBalance(uid);
@@ -106,14 +110,17 @@ void mainState() {
 
     // pay mode
     if (!digitalRead(BTN_1)) {
+      tone(BUZZER_PIN, highc, 100);
       payState();
     }
     // top-up mode
     else if (!digitalRead(BTN_2)) {
+      tone(BUZZER_PIN, highc, 100);
       topUpState();
     }
     // check-balance mode
     else if (!digitalRead(BTN_3)) {
+      tone(BUZZER_PIN, highc, 100);
       balanceState();
     }
 
@@ -147,20 +154,30 @@ void payState() {
     displayOLED(10, 28, "pay");
 
     if (!digitalRead(BTN_1)) {
+      tone(BUZZER_PIN, highc, 100);
       paymentValue += 5;
       generalTimer = 0;
     } else if (!digitalRead(BTN_2)) {
+      tone(BUZZER_PIN, highc, 100);
       if (paymentValue >= 5) {
         paymentValue -= 5;
         generalTimer = 0;
       }
     } else if (!digitalRead(BTN_3)) {
+      tone(BUZZER_PIN, highc, 100);
       if (updateBalance(-1 * paymentValue)) {
         saveBalance();
         isExitMain = true;
         break;
+      } else {
+        oled.clearDisplay();
+        displayOLED(2, 5, "not enough");
+        displayOLED(15, 32, "money");
+        delay(1500);
+        oled.clearDisplay();
       }
     } else if (!digitalRead(BTN_4)) {
+      tone(BUZZER_PIN, highc, 100);
       clearAllDisplays(); 
       generalTimer = 0;
       break;
@@ -188,20 +205,24 @@ void topUpState() {
     displayOLED(10, 28, "top-up");
 
     if (!digitalRead(BTN_1)) {
+      tone(BUZZER_PIN, highc, 100);
       topUpValue += 5;
       generalTimer = 0;
     } else if (!digitalRead(BTN_2)) {
+      tone(BUZZER_PIN, highc, 100);
       if (topUpValue >= 5) {
         topUpValue -= 5;
       }
       generalTimer = 0;
     } else if (!digitalRead(BTN_3)) {
+      tone(BUZZER_PIN, highc, 100);
       if (updateBalance(topUpValue)) {
         saveBalance();
         isExitMain = true;
         break;
       }
     } else if (!digitalRead(BTN_4)) {
+      tone(BUZZER_PIN, highc, 100);
       clearAllDisplays();
       generalTimer = 0;
       break;
