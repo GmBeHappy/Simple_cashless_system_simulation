@@ -5,17 +5,18 @@
 #include "MFRC522.h"
 #include "hd44780.h"
 #include "hd44780_I2Cexp.h"
-#define SS_PIN 10
-#define RST_PIN 9
-
 #include "Adafruit_GFX.h"
 #include "Adafruit_SSD1306.h"
-#define OLED_RESET 4
 
+#define memorylength 2048
+#define SS_PIN 10
+#define RST_PIN 9 
 #define BTN_1 4
+#define OLED_RESET 4
 #define BTN_2 5
 #define BTN_3 6
 #define BTN_4 7
+#define EEPROM_DEVICE_ADDRESS 0x50
 
 void initLCD();
 void initOLED();
@@ -32,6 +33,10 @@ void topUpState();
 void balanceState();
 int getBalance(byte* uid);
 bool updateBalance(int updateValue);
+void saveBalance();
+byte readEEPROM_byte(int device, unsigned int address);
+void readEEPROM_page(int device, unsigned int address, byte *buffer, int length);
+void writeEEPROM_page(int device, unsigned int address, byte* buffer, byte length);
 
 // lcd global variables
 hd44780_I2Cexp lcd(0x27);
@@ -51,8 +56,10 @@ boolean isExitMain = false;
 int balanceStateTimer = 0;
 int generalTimer = 0;
 int balance = 0;
+int userCredential = 0;
 
 void setup() {
+  Wire.begin();
   initLCD();
   initOLED();
   initScanner();
@@ -70,12 +77,19 @@ void loop() {
     }
     printHex(rfid.uid.uidByte, rfid.uid.size);
     Serial.println();
-    // if (getBalance(uid) != -1) {
-    mainState();
-    //}
+    if (getBalance(uid) != -1) {
+      Serial.println(getBalance(uid));
+      balance = getBalance(uid);
+      mainState();
+    } else {
+      oled.clearDisplay();
+      displayOLED(10, 28, "deny");
+    }
     rfid.PICC_HaltA();
     rfid.PCD_StopCrypto1();
   }
+
+  balance = 0;
 }
 
 void mainState() {
@@ -116,6 +130,7 @@ void mainState() {
   }
 
   isExitMain = false;
+  userCredential = 0;
   clearAllDisplays();
   oled.display();
 }
@@ -141,6 +156,7 @@ void payState() {
       }
     } else if (!digitalRead(BTN_3)) {
       if (updateBalance(-1 * paymentValue)) {
+        saveBalance();
         isExitMain = true;
         break;
       }
@@ -181,6 +197,7 @@ void topUpState() {
       generalTimer = 0;
     } else if (!digitalRead(BTN_3)) {
       if (updateBalance(topUpValue)) {
+        saveBalance();
         isExitMain = true;
         break;
       }
@@ -202,15 +219,16 @@ void topUpState() {
 
 void balanceState() {
   clearAllDisplays();
-  oled.display();
+  oled.display();                   
 
   balanceStateTimer = 0; 
   while(1) {
     displayLCD(0, 0, "$:" + String(balance));
     displayOLED(10, 28, "balance");
 
-    if (balanceStateTimer >= 3) {
+    if (balanceStateTimer >= 4) {
       balanceStateTimer = 0;
+      generalTimer = 0;
       clearAllDisplays();
       break;
     }
@@ -278,7 +296,31 @@ void initTimerInterrupts() {
   interrupts();             // enable all interrupts
 }
 
-int getBalance(byte* uid) { return -1; }
+int getBalance(byte* uid) { 
+  for(int i = 0; i < 2; i++){
+    byte savedUid[4]; 
+    byte memoryAddress = 0x00 + (i*16);
+    readEEPROM_page(EEPROM_DEVICE_ADDRESS, memoryAddress, savedUid, sizeof(savedUid));
+    if (uid[0] == savedUid[0] &&
+        uid[1] == savedUid[1] &&
+        uid[2] == savedUid[2] &&
+        uid[3] == savedUid[3]) {
+          String savedBalance = "";
+          byte readValue = readEEPROM_byte(EEPROM_DEVICE_ADDRESS, memoryAddress+4);
+          while (readValue != 0xFF) {
+            savedBalance += String(char(readValue));
+            memoryAddress++;
+            readValue = readEEPROM_byte(EEPROM_DEVICE_ADDRESS, memoryAddress+4);
+          }
+
+          userCredential = i+1;
+
+          return savedBalance.toInt();
+        }
+  }
+
+  return -1; 
+ }
 
 bool updateBalance(int updateValue) {
   if (balance + updateValue < 0) {
@@ -286,6 +328,24 @@ bool updateBalance(int updateValue) {
   }
   balance += updateValue;
   return true;
+}
+
+void saveBalance() {
+  String stringBalance = String(balance);
+  char charBalance[stringBalance.length() + 1];
+  stringBalance.toCharArray(charBalance, stringBalance.length() + 1);
+  Serial.println(userCredential);
+  Serial.println(stringBalance);
+  for (auto ch: charBalance) {
+    Serial.print(" ch ");
+    Serial.println(ch);
+  }
+
+  Serial.println(0x00 + ((userCredential-1) * 16) + 0x04, HEX);
+  byte cleanEEPROM[12] = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
+  writeEEPROM_page(EEPROM_DEVICE_ADDRESS, 0x00 + ((userCredential-1) * 16) + 0x04, (byte *)cleanEEPROM, sizeof(cleanEEPROM));
+  writeEEPROM_page(EEPROM_DEVICE_ADDRESS, 0x00 + ((userCredential-1) * 16) + 0x04, (byte *)charBalance, sizeof(charBalance));
+
 }
 
 void printHex(byte* buffer, byte bufferSize) {
@@ -310,3 +370,39 @@ void clearAllDisplays() {
   lcd.clear();
   oled.clearDisplay();
 }
+
+byte readEEPROM_byte(int device, unsigned int address ) {
+  byte rdata = 0;
+  Wire.beginTransmission(device | (int)(address >> 8));
+  Wire.write((int)(address & 0xFF)); // LSB
+  Wire.endTransmission();
+  Wire.requestFrom(device, 1);
+  if (Wire.available())
+  rdata = Wire.read();
+  return rdata;
+}
+
+void readEEPROM_page(int device, unsigned int address, byte *buffer, int length )
+{
+  byte i;
+  Wire.beginTransmission(device | (int)(address >> 8));
+  Wire.write((int)(address & 0xFF)); // LSB
+  Wire.endTransmission();
+  Wire.requestFrom(device, length);
+  for ( i = 0; i < length; i++ )
+  if (Wire.available())
+  buffer[i] = Wire.read();
+}
+
+void writeEEPROM_page(int device, unsigned int address, byte* buffer, byte length ) {
+  byte i;
+  Wire.beginTransmission(device | (int)(address >> 8));
+  Wire.write((int)(address & 0xFF)); // LSB
+  for ( i = 0; i < length; i++)
+  Wire.write(buffer[i]);
+  Wire.endTransmission();
+  delay(10);
+}
+
+
+
