@@ -17,3 +17,7 @@
 6. Passive Buzzer
 7. LDR
 8. Button
+
+### การต่อวงจร
+
+![image](https://github.com/GmBeHappy/Simple_cashless_system_simulation/blob/main/main.jpg)
