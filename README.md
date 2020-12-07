@@ -3,6 +3,9 @@
 การจำลองระบบการใช้จ่ายไร้เงินสดด้วย arduino
 
 โปรเจคนี้เป็นงานของวิชา Introduction to Computer Engineering 
+
+สามารถดูคลิปการทำงานได้ที่ [here](https://youtu.be/lD12LQloVX0)
+
 ## Getting started
 ### อุปกรณ์ที่ใช้
 
