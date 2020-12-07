@@ -20,8 +20,6 @@
 #define BUZZER_PIN 3
 #define IDR_PIN A1
 
-int highc = 523;
-
 void initLCD();
 void initOLED();
 void initScanner();
@@ -43,6 +41,8 @@ void saveBalance();
 byte readEEPROM_byte(int device, unsigned int address);
 void readEEPROM_page(int device, unsigned int address, byte *buffer, int length);
 void writeEEPROM_page(int device, unsigned int address, byte* buffer, byte length);
+void openBox();
+void closeBox();
 
 // lcd global variables
 hd44780_I2Cexp lcd(0x27);
@@ -66,14 +66,23 @@ int userCredential = 0;
 boolean isInTopUpState = false;
 boolean isValidInsert = false;
 
+// buzzer global variables
+int highc = 523;
+
+// stepmotor global variable
+long startMotor;
+
 void setup() {
   Wire.begin();
+  Serial.begin(9600);
   initLCD();
   initOLED();
   initScanner();
   initButtons();
   initTimerInterrupts();
   pinMode(IDR_PIN, INPUT);
+  clearAllDisplays();
+  oled.clearDisplay();
 }
 
 void loop() {
@@ -180,6 +189,9 @@ void payState() {
       if (updateBalance(-1 * paymentValue)) {
         saveBalance();
         isExitMain = true;
+        oled.clearDisplay();
+        displayOLED(10, 28, "done");
+        delay(1000);
         break;
       } else {
         oled.clearDisplay();
@@ -231,7 +243,8 @@ void topUpState() {
       generalTimer = 0;
     } else if (!digitalRead(BTN_3)) {
       tone(BUZZER_PIN, highc, 100);
-      if (pendingState() && updateBalance(topUpValue)) {
+      generalTimer = 0;
+      if (topUpValue > 0 && pendingState() && updateBalance(topUpValue)) {
         saveBalance();
         isExitMain = true;
         break;
@@ -278,6 +291,7 @@ void balanceState() {
 bool pendingState() {
   clearAllDisplays();
   oled.clearDisplay();
+  openBox();
 
   while(1) {
     displayLCD(0, 0, "Insert money");
@@ -285,19 +299,24 @@ bool pendingState() {
     displayOLED(10, 25, "pending");
 
     if(!digitalRead(BTN_1)) {
+      tone(BUZZER_PIN, highc, 100);
       generalTimer = 0;
-      //close box
+      closeBox();
       return true;
     } else if (!digitalRead(BTN_2)) {
+      tone(BUZZER_PIN, highc, 100);
       generalTimer = 0;
-      //close box
+      closeBox();
+      oled.clearDisplay();
+      displayOLED(10, 28, "done");
+      delay(1000);
       clearAllDisplays();
       return false;
     }
 
     if (generalTimer >= 8) {
       generalTimer = 0;
-      //close box
+      closeBox();
       clearAllDisplays();
       return false;
     }
@@ -337,7 +356,6 @@ void initOLED() {
 
 void initScanner() {
   // initial scanner
-  Serial.begin(9600);
   SPI.begin();      // Init SPI bus
   rfid.PCD_Init();  // Init MFRC522
   for (byte i = 0; i < 6; i++) {
@@ -489,5 +507,41 @@ void writeEEPROM_page(int device, unsigned int address, byte* buffer, byte lengt
   delay(10);
 }
 
+void closeBox(){
+  Serial.println("Close Box");
+  byte address,data,device;
+  address = 0x23;
+  device = address; 
+  startMotor = millis();
+  while ((millis()-startMotor)<=2800){
+    data = 0x10;
+    for (int i = 1 ; i <= 4; i++)
+    {
+      Wire.beginTransmission(device);
+      Wire.write(data);
+      Wire.endTransmission();
+      delay(5);
+      data = data << 1;
+    }
+  }
+}
 
+void openBox(){
+  Serial.println("Open Box");
+  byte address,data,device;
+  address = 0x23;
+  device = address; 
+  startMotor = millis();
+  while ((millis()-startMotor)<=2800){
+    data = 0x80;
+    for (int i = 1 ; i <= 4; i++)
+    {
+      Wire.beginTransmission(device);
+      Wire.write(data);
+      Wire.endTransmission();
+      delay(5);
+      data = data >> 1;
+    }
+  }
+}
 
