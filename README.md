@@ -4,7 +4,7 @@
 
 โปรเจคนี้เป็นงานของวิชา Introduction to Computer Engineering 
 
-สามารถดูคลิปการทำงานได้ที่ [here](https://youtu.be/lD12LQloVX0)
+สามารถดูคลิปการทำงานได้ที่ [here](https://youtu.be/Rq-7kNo35-c)
 
 ## Getting started
 ### อุปกรณ์ที่ใช้
